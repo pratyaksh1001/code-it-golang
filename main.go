@@ -47,6 +47,7 @@ func main() {
 	r.POST("/question_list", question_list)
 
 	r.GET("/tags", get_tags)
+	r.GET("/problem/:qid", get_question)
 
 	r.Run(":8000")
 	defer db.Close()

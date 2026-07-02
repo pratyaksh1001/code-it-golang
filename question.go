@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -16,8 +17,9 @@ func create_question(c *gin.Context) {
 		Input    string   `json:"input"`
 		Output   string   `json:"output"`
 		Tags     []string `json:"tags"`
+		Title    string   `json:"title"`
 	}
-	cache.SAdd(context.Background(), "tags", question.Tags)
+
 	c.ShouldBindJSON(&question)
 	token_decoded, _ := jwt.Parse(question.Token, func(token *jwt.Token) (any, error) {
 		return Signature_key, nil
@@ -25,7 +27,12 @@ func create_question(c *gin.Context) {
 	claims := token_decoded.Claims.(jwt.MapClaims)
 	email := claims["email"].(string)
 
-	db.Exec(c.Request.Context(), "insert into question(email, problem, tags) values($1,$2,$3)", email, question.Question, question.Tags)
+	tags := question.Tags
+	for _, v := range tags {
+		go cache.SAdd(context.Background(), "tags", v)
+	}
+
+	db.Exec(c.Request.Context(), "insert into question(email, problem, tags,title) values($1,$2,$3,$4);", email, question.Question, question.Tags, question.Title)
 	var qid int
 	db.QueryRow(c.Request.Context(), "select max(qid) from question;").Scan(&qid)
 	db.Exec(c.Request.Context(), "insert into testcases(qid,input,output,email) values($1,$2,$3,$4);", qid, question.Input, question.Output, email)
@@ -120,7 +127,38 @@ func question_list(c *gin.Context) {
 }
 
 func get_tags(c *gin.Context) {
+	fmt.Println(cache.SMembers(context.Background(), "tags").Val())
 	c.JSON(http.StatusOK, gin.H{
 		"tags": cache.SMembers(context.Background(), "tags").Val(),
+	})
+}
+
+func get_question(c *gin.Context) {
+	qid, _ := c.Params.Get("qid")
+
+	var question struct {
+		Title   string   `json:"title"`
+		Problem string   `json:"problem"`
+		Tags    []string `json:"tags"`
+		Input   string   `json:"input"`
+		Output  string   `json:"output"`
+	} = struct {
+		Title   string   `json:"title"`
+		Problem string   `json:"problem"`
+		Tags    []string `json:"tags"`
+		Input   string   `json:"input"`
+		Output  string   `json:"output"`
+	}{}
+	db.QueryRow(c.Request.Context(), "select title,problem,tags from question where qid=$1;", qid).Scan(&question.Title, &question.Problem, &question.Tags)
+	db.QueryRow(c.Request.Context(), "select input,output from testcases where qid=$1 order by tid limit 1;", qid).Scan(&question.Input, &question.Output)
+	fmt.Println(question)
+	json_data, _ := json.Marshal(question)
+	fmt.Println(string(json_data))
+	c.JSON(http.StatusOK, gin.H{
+		"title":       question.Title,
+		"description": question.Problem,
+		"input":       question.Input,
+		"output":      question.Output,
+		"tags":        question.Tags,
 	})
 }

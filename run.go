@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -240,5 +243,62 @@ func run_tests_py(c *gin.Context) {
 		tests = append(tests, tc)
 	}
 	fmt.Println(tests)
+	src, _ := os.CreateTemp("", "*.py")
+	defer os.Remove(src.Name())
+	src.WriteString(data.Code)
+	score := 0
+	total := len(tests)
+	res := make(chan bool)
+	var wg sync.WaitGroup
+	fmt.Println(src.Name())
+	now := time.Now()
+	for _, v := range tests {
+		wg.Add(1)
+		go execute_py(src.Name(), v, res, &wg)
+	}
+	go func() {
+		wg.Wait()
+		close(res)
+	}()
+	for v := range res {
+		if v {
+			score++
+		} else {
+			break
+		}
+	}
+	end := time.Now()
+	time_taken := end.Sub(now)
+	fmt.Println(time_taken.Milliseconds())
+	passed := (score == total)
+	c.JSON(http.StatusOK, gin.H{
+		"status":     passed,
+		"score":      score,
+		"time_taken": time_taken.Milliseconds(),
+	})
+}
+
+func execute_py(name string, testcase struct {
+	Input  string
+	Output string
+}, res chan bool, wg *sync.WaitGroup) {
+	defer wg.Done()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "python3", name)
+	cmd.Stdin = strings.NewReader(testcase.Input)
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		res <- false
+		return
+	}
+	if err != nil {
+		log.Fatal("python code execution failed")
+	}
+	res <- (strings.Trim(string(out), "\n") == (testcase.Output))
+
+}
+
+func run_sample(c *gin.Context) {
 
 }
