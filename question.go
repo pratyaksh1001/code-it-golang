@@ -31,11 +31,12 @@ func create_question(c *gin.Context) {
 	for _, v := range tags {
 		go cache.SAdd(context.Background(), "tags", v)
 	}
-
 	db.Exec(c.Request.Context(), "insert into question(email, problem, tags,title) values($1,$2,$3,$4);", email, question.Question, question.Tags, question.Title)
 	var qid int
-	db.QueryRow(c.Request.Context(), "select max(qid) from question;").Scan(&qid)
-	db.Exec(c.Request.Context(), "insert into testcases(qid,input,output,email) values($1,$2,$3,$4);", qid, question.Input, question.Output, email)
+	db.QueryRow(c.Request.Context(), "select qid from question where title=$1;", question.Title).Scan(&qid)
+	fmt.Println(qid)
+	go db.Exec(context.Background(), "insert into testcases(qid,input,output,email) values($1,$2,$3,$4);", qid, question.Input, question.Output, email)
+	go generate_driver_code_from_IO(qid)
 	c.JSON(http.StatusOK, gin.H{
 		"created": true,
 	})
@@ -149,6 +150,7 @@ func get_question(c *gin.Context) {
 		Input   string   `json:"input"`
 		Output  string   `json:"output"`
 	}{}
+
 	db.QueryRow(c.Request.Context(), "select title,problem,tags from question where qid=$1;", qid).Scan(&question.Title, &question.Problem, &question.Tags)
 	db.QueryRow(c.Request.Context(), "select input,output from testcases where qid=$1 order by tid limit 1;", qid).Scan(&question.Input, &question.Output)
 	fmt.Println(question)
@@ -160,5 +162,31 @@ func get_question(c *gin.Context) {
 		"input":       question.Input,
 		"output":      question.Output,
 		"tags":        question.Tags,
+	})
+}
+
+func get_driver(c *gin.Context) {
+	var data struct {
+		Language string `json:"language"`
+		Qid      int    `json:"qid"`
+	} = struct {
+		Language string `json:"language"`
+		Qid      int    `json:"qid"`
+	}{}
+	c.ShouldBindJSON(&data)
+	fmt.Println(data)
+	var driver string
+	var abbr string
+	if data.Language == "python" {
+		db.QueryRow(c.Request.Context(), "select code from driver_py where qid=$1", data.Qid).Scan(&driver)
+	} else if data.Language == "go" {
+		db.QueryRow(c.Request.Context(), "select code from driver_go where qid=$1", data.Qid).Scan(&driver)
+	} else if data.Language == "javascript" {
+		db.QueryRow(c.Request.Context(), "select code from driver_js where qid=$1", data.Qid).Scan(&driver)
+	}
+	db.QueryRow(c.Request.Context(), "select code from $1 where qid=$2", "driver_"+abbr, data.Qid).Scan(&driver)
+	fmt.Println(driver)
+	c.JSON(http.StatusOK, gin.H{
+		"code": driver,
 	})
 }

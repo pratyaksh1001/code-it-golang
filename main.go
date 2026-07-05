@@ -16,6 +16,8 @@ func main() {
 	opt, _ := redis.ParseURL("rediss://default:gQAAAAAAAhGlAAIgcDIyNGVmN2Y2NGQyOWM0MTRmOWUwMWI1Yzg0MzM2NzE4Mg@vital-mink-135589.upstash.io:6379")
 	cache = redis.NewClient(opt)
 	godotenv.Load()
+	go connect_gemini()
+	go get_facts()
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
 			"http://localhost:3000",
@@ -45,9 +47,11 @@ func main() {
 	r.POST("/question", create_question)
 	r.POST("/testcase", create_testcase)
 	r.POST("/question_list", question_list)
+	r.POST("/driver", get_driver)
 
 	r.GET("/tags", get_tags)
 	r.GET("/problem/:qid", get_question)
+	r.GET("/article", send_random_fact)
 
 	r.Run(":8000")
 	defer db.Close()

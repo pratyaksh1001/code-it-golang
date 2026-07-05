@@ -249,16 +249,18 @@ func run_tests_py(c *gin.Context) {
 	score := 0
 	total := len(tests)
 	res := make(chan bool)
+	err_chan := make(chan string)
 	var wg sync.WaitGroup
 	fmt.Println(src.Name())
 	now := time.Now()
 	for _, v := range tests {
 		wg.Add(1)
-		go execute_py(src.Name(), v, res, &wg)
+		go execute_py(src.Name(), v, res, &wg, err_chan)
 	}
 	go func() {
 		wg.Wait()
 		close(res)
+		close(err_chan)
 	}()
 	for v := range res {
 		if v {
@@ -267,6 +269,13 @@ func run_tests_py(c *gin.Context) {
 			break
 		}
 	}
+	var code_failure string
+	for v := range err_chan {
+		if v != "" {
+			code_failure = v
+		}
+	}
+
 	end := time.Now()
 	time_taken := end.Sub(now)
 	fmt.Println(time_taken.Milliseconds())
@@ -274,28 +283,35 @@ func run_tests_py(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":     passed,
 		"score":      score,
-		"time_taken": time_taken.Milliseconds(),
+		"time_taken": fmt.Sprintf("time taken - %d ms", time_taken.Milliseconds()),
+		"error":      code_failure,
 	})
 }
 
 func execute_py(name string, testcase struct {
 	Input  string
 	Output string
-}, res chan bool, wg *sync.WaitGroup) {
+}, res chan bool, wg *sync.WaitGroup, err_chan chan string) {
 	defer wg.Done()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
+	var code_failure string = ""
 	cmd := exec.CommandContext(ctx, "python3", name)
 	cmd.Stdin = strings.NewReader(testcase.Input)
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
+		code_failure = "Time limit Exceeded"
 		res <- false
+		err_chan <- code_failure
 		return
 	}
 	if err != nil {
-		log.Fatal("python code execution failed")
+		code_failure = err.Error()
+		log.Println("python code execution failed")
 	}
+
 	res <- (strings.Trim(string(out), "\n") == (testcase.Output))
+	err_chan <- code_failure
 
 }
 

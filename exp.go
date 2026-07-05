@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -23,27 +21,6 @@ func redis_test() {
 	test = redis.NewClient(opt)
 	arr := []string{"array", "sorting", "two pointers"}
 	test.SAdd(context.Background(), "tags", arr)
-}
-
-func ws_test(c *gin.Context) {
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		fmt.Println("error")
-	}
-	defer conn.Close()
-	i := 0
-	for {
-		msg_type, p, _ := conn.ReadMessage()
-		fmt.Println(string(p), i)
-		i++
-		err := conn.WriteMessage(msg_type, p)
-		if err != nil {
-			fmt.Println("error 2")
-			break
-		}
-
-	}
-
 }
 
 // func main() {
