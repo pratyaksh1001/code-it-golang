@@ -31,14 +31,19 @@ func create_question(c *gin.Context) {
 	for _, v := range tags {
 		go cache.SAdd(context.Background(), "tags", v)
 	}
-	db.Exec(c.Request.Context(), "insert into question(email, problem, tags,title) values($1,$2,$3,$4);", email, question.Question, question.Tags, question.Title)
+	flag := true
+	_, err := db.Exec(c.Request.Context(), "insert into question(email, problem, tags,title) values($1,$2,$3,$4);", email, question.Question, question.Tags, question.Title)
+	if err != nil {
+		flag = false
+		fmt.Println("question creation failed")
+	}
 	var qid int
 	db.QueryRow(c.Request.Context(), "select qid from question where title=$1;", question.Title).Scan(&qid)
 	fmt.Println(qid)
 	go db.Exec(context.Background(), "insert into testcases(qid,input,output,email) values($1,$2,$3,$4);", qid, question.Input, question.Output, email)
 	go generate_driver_code_from_IO(qid)
 	c.JSON(http.StatusOK, gin.H{
-		"created": true,
+		"created": flag,
 	})
 }
 

@@ -163,13 +163,14 @@ func generate_driver_code_from_IO(qid int) {
 		ResponseJsonSchema: driver_generator_schema,
 	}
 	var prompt string = ""
-	prompt += "DO NOT USE ESCAPE SEQUENCES MAKE SURE THE RESPONSE IS WELL FORMATTED AND INDENTED you have to generate driver code and solution code only in go,js,py and the function that user runs should be named solution and the rest you have to handle do not use escape sequences for anything and the solution code should also strictly take the input and output format in consideration and there should be a function named after the question title and the usetr is supposed to write that function only with all the required arguments passed by driver code the user will not define the function you have to give function defined as well"
+	prompt += "DO NOT USE ESCAPE SEQUENCES MAKE SURE THE RESPONSE IS WELL FORMATTED AND INDENTED DO NOT USE ';' FOR ENDING LINE MAKE IT LOOK WELL FORMATTED you have to generate driver code and solution code only in go,js,py and the function that user runs should be named solution and the rest you have to handle do not use escape sequences for anything and the solution code should also strictly take the input and output format in consideration and there should be a function named after the question title and the usetr is supposed to write that function only with all the required arguments passed by driver code the user will not define the function you have to give function defined as well"
 	prompt += "description - " + description
 	prompt += "input will be like this - " + input
 	prompt += "output will be like this - " + output
 
 	resp, err := ai.Models.GenerateContent(context.Background(), "gemini-2.5-flash", genai.Text(prompt), config)
 	if err != nil {
+		fmt.Println(err.Error())
 		fmt.Println("driver code generation failed")
 	}
 	//fmt.Println(string(resp.Text()))

@@ -15,17 +15,21 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func executeGo(binary string, input string, expected string, wg *sync.WaitGroup, results chan bool) {
+func executeGo(binary string, input string, expected string, wg *sync.WaitGroup, results chan bool, err_chan chan string) {
 	defer wg.Done()
-
-	cmd := exec.Command(binary)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Second*3))
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary)
 	cmd.Stdin = strings.NewReader(input)
 
 	out, err := cmd.CombinedOutput()
+
 	if err != nil {
 		fmt.Println("Runtime Error:", err)
 		fmt.Println(string(out))
+		err_chan <- err.Error()
 		results <- false
+		fmt.Println("error occured in go testcase exec")
 		return
 	}
 
@@ -33,6 +37,7 @@ func executeGo(binary string, input string, expected string, wg *sync.WaitGroup,
 	expected = strings.TrimSpace(expected)
 
 	results <- (actual == expected)
+	err_chan <- actual
 }
 
 func run_tests(c *gin.Context) {
@@ -143,7 +148,8 @@ func run_tests(c *gin.Context) {
 
 	var wg sync.WaitGroup
 
-	results := make(chan bool)
+	results := make(chan bool, len(tests))
+	err_chan := make(chan string, len(tests))
 
 	for _, tc := range tests {
 		wg.Add(1)
@@ -154,12 +160,14 @@ func run_tests(c *gin.Context) {
 			tc.Output,
 			&wg,
 			results,
+			err_chan,
 		)
 	}
 
 	go func() {
 		wg.Wait()
 		close(results)
+		close(err_chan)
 	}()
 
 	score := 0
@@ -172,6 +180,19 @@ func run_tests(c *gin.Context) {
 		} else {
 			success = false
 		}
+	}
+	for msg := range err_chan {
+		fmt.Println(msg)
+		if msg != "" {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"error":   msg,
+				"score":   score,
+				"total":   total,
+			})
+			return
+		}
+
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -310,7 +331,7 @@ func execute_py(name string, testcase struct {
 		log.Println("python code execution failed")
 	}
 
-	res <- (strings.Trim(string(out), "\n") == (testcase.Output))
+	res <- (strings.TrimSpace(strings.Trim(string(out), "\n")) == (testcase.Output))
 	err_chan <- code_failure
 
 }
