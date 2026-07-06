@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5"
 )
 
 func executeGo(binary string, input string, expected string, wg *sync.WaitGroup, results chan bool, err_chan chan string) {
@@ -43,10 +44,11 @@ func executeGo(binary string, input string, expected string, wg *sync.WaitGroup,
 func run_tests(c *gin.Context) {
 
 	var data struct {
-		Code     string `json:"code"`
-		Qid      int    `json:"qid"`
-		Token    string `json:"token"`
-		Language string `json:"language"`
+		Code       string `json:"code"`
+		Qid        int    `json:"qid"`
+		Token      string `json:"token"`
+		Language   string `json:"language"`
+		Submission bool   `json:"submission"`
 	}
 
 	if err := c.ShouldBindJSON(&data); err != nil {
@@ -68,13 +70,22 @@ func run_tests(c *gin.Context) {
 	}
 
 	claims := token.Claims.(jwt.MapClaims)
+	email := claims["email"]
 	fmt.Println("User:", claims["email"])
-
-	rows, err := db.Query(
-		c.Request.Context(),
-		"SELECT input, output FROM testcases WHERE qid=$1",
-		data.Qid,
-	)
+	var rows pgx.Rows
+	if data.Submission {
+		rows, _ = db.Query(
+			c.Request.Context(),
+			"SELECT input, output FROM testcases WHERE qid=$1;",
+			data.Qid,
+		)
+	} else {
+		rows, _ = db.Query(
+			c.Request.Context(),
+			"SELECT input, output FROM testcases WHERE qid=$1 limit 1;",
+			data.Qid,
+		)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
@@ -140,8 +151,12 @@ func run_tests(c *gin.Context) {
 	compileOut, err := build.CombinedOutput()
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"compile_error": string(compileOut),
+		c.JSON(http.StatusOK, gin.H{
+			"score":      0,
+			"total":      len(tests),
+			"success":    false,
+			"error":      string(compileOut),
+			"time_taken": 0,
 		})
 		return
 	}
@@ -150,7 +165,7 @@ func run_tests(c *gin.Context) {
 
 	results := make(chan bool, len(tests))
 	err_chan := make(chan string, len(tests))
-
+	now := time.Now()
 	for _, tc := range tests {
 		wg.Add(1)
 
@@ -181,33 +196,38 @@ func run_tests(c *gin.Context) {
 			success = false
 		}
 	}
-	for msg := range err_chan {
-		fmt.Println(msg)
-		if msg != "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"error":   msg,
-				"score":   score,
-				"total":   total,
-			})
-			return
+	end := time.Now()
+	time_taken := end.Sub(now).Milliseconds()
+	fmt.Println(time_taken)
+	if score == total && data.Submission {
+		db.Exec(context.Background(), "insert into submissions(qid,email,runtime,submitted_at,language) values($1,$2,$3,$4,$5);", data.Qid, email, time_taken, time.Now().UTC(), data.Language)
+	}
+	var console_msg string
+	if !data.Submission {
+		for msg := range err_chan {
+			fmt.Println(msg)
+			if msg != "" {
+				console_msg = msg
+			}
 		}
-
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"score":   score,
-		"total":   total,
-		"success": success,
+		"score":      score,
+		"total":      total,
+		"success":    success,
+		"error":      console_msg,
+		"time_taken": time_taken,
 	})
 }
 
 func run_tests_py(c *gin.Context) {
 	var data struct {
-		Code     string `json:"code"`
-		Qid      int    `json:"qid"`
-		Token    string `json:"token"`
-		Language string `json:"language"`
+		Code       string `json:"code"`
+		Qid        int    `json:"qid"`
+		Token      string `json:"token"`
+		Language   string `json:"language"`
+		Submission bool   `json:"submission"`
 	}
 
 	if err := c.ShouldBindJSON(&data); err != nil {
@@ -229,19 +249,25 @@ func run_tests_py(c *gin.Context) {
 	}
 
 	claims := token.Claims.(jwt.MapClaims)
+	email := claims["email"]
 	fmt.Println("User:", claims["email"])
 
-	rows, err := db.Query(
-		c.Request.Context(),
-		"SELECT input, output FROM testcases WHERE qid=$1",
-		data.Qid,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
-		return
+	var rows pgx.Rows
+
+	if data.Submission {
+		rows, _ = db.Query(
+			c.Request.Context(),
+			"SELECT input, output FROM testcases WHERE qid=$1;",
+			data.Qid,
+		)
+	} else {
+		rows, _ = db.Query(
+			c.Request.Context(),
+			"SELECT input, output FROM testcases WHERE qid=$1 limit 1;",
+			data.Qid,
+		)
 	}
+
 	defer rows.Close()
 
 	type TestCase struct {
@@ -255,6 +281,7 @@ func run_tests_py(c *gin.Context) {
 		var tc TestCase
 
 		if err := rows.Scan(&tc.Input, &tc.Output); err != nil {
+			fmt.Println("error parsing IO from DB")
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -269,8 +296,8 @@ func run_tests_py(c *gin.Context) {
 	src.WriteString(data.Code)
 	score := 0
 	total := len(tests)
-	res := make(chan bool)
-	err_chan := make(chan string)
+	res := make(chan bool, len(tests))
+	err_chan := make(chan string, len(tests))
 	var wg sync.WaitGroup
 	fmt.Println(src.Name())
 	now := time.Now()
@@ -290,10 +317,12 @@ func run_tests_py(c *gin.Context) {
 			break
 		}
 	}
-	var code_failure string
-	for v := range err_chan {
-		if v != "" {
-			code_failure = v
+	var code_failure string = ""
+	if !data.Submission {
+		for v := range err_chan {
+			if v != "" {
+				code_failure = v
+			}
 		}
 	}
 
@@ -301,11 +330,15 @@ func run_tests_py(c *gin.Context) {
 	time_taken := end.Sub(now)
 	fmt.Println(time_taken.Milliseconds())
 	passed := (score == total)
+	if score == total && data.Submission {
+		db.Exec(context.Background(), "insert into submissions(qid,email,runtime,submitted_at,language) values($1,$2,$3,$4,$5);", data.Qid, email, time_taken, time.Now().UTC(), data.Language)
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"status":     passed,
+		"success":    passed,
 		"score":      score,
-		"time_taken": fmt.Sprintf("time taken - %d ms", time_taken.Milliseconds()),
+		"time_taken": time_taken.Milliseconds(),
 		"error":      code_failure,
+		"total":      total,
 	})
 }
 
@@ -332,10 +365,10 @@ func execute_py(name string, testcase struct {
 	}
 
 	res <- (strings.TrimSpace(strings.Trim(string(out), "\n")) == (testcase.Output))
-	err_chan <- code_failure
-
-}
-
-func run_sample(c *gin.Context) {
+	if code_failure == "" {
+		err_chan <- code_failure
+	} else {
+		err_chan <- string(out)
+	}
 
 }

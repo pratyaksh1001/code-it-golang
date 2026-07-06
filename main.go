@@ -42,7 +42,7 @@ func main() {
 	r.POST("/register", register)
 	r.POST("/login", login)
 	r.POST("/auth", authenticate)
-	r.POST("/run", run_tests)
+	r.POST("/run_go", run_tests)
 	r.POST("/run_python", run_tests_py)
 	r.POST("/question", create_question)
 	r.POST("/testcase", create_testcase)
