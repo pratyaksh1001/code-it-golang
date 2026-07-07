@@ -53,6 +53,6 @@ func main() {
 	r.GET("/problem/:qid", get_question)
 	r.GET("/article", send_random_fact)
 
-	r.Run("0.0.0.0:8080")
+	r.Run("0.0.0.0:80")
 	defer db.Close()
 }
