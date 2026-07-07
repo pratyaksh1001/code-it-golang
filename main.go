@@ -47,6 +47,7 @@ func main() {
 	r.POST("/testcase", create_testcase)
 	r.POST("/question_list", question_list)
 	r.POST("/driver", get_driver)
+	r.POST("/profile", get_profile)
 
 	r.GET("/tags", get_tags)
 	r.GET("/problem/:qid", get_question)
