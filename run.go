@@ -331,7 +331,7 @@ func run_tests_py(c *gin.Context) {
 	fmt.Println(time_taken.Milliseconds())
 	passed := (score == total)
 	if score == total && data.Submission {
-		db.Exec(context.Background(), "insert into submissions(qid,email,runtime,submitted_at,language) values($1,$2,$3,$4,$5);", data.Qid, email, time_taken, time.Now().UTC(), data.Language)
+		db.Exec(context.Background(), "insert into submissions(qid,email,runtime,submitted_at,language) values($1,$2,$3,$4,$5);", data.Qid, email, time_taken.Milliseconds(), time.Now().UTC(), data.Language)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success":    passed,
