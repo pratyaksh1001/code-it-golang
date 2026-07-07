@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -24,7 +22,7 @@ func main() {
 			"http://127.0.0.1:3000",
 			"http://localhost:3001",
 			"http://127.0.0.1:3001",
-			os.Getenv("FRONTEND_URL"),
+			"https://code-it-golang-frontend.vercel.app/",
 		},
 		AllowMethods: []string{"GET", "PUT", "POST", "DLETE", "OPTIONS", "PATCH"},
 		AllowHeaders: []string{
