@@ -24,6 +24,7 @@ func main() {
 			"http://127.0.0.1:3001",
 			"https://code-it-golang-frontend.vercel.app/",
 			"http://148.113.8.216:3000",
+			"https://pratyaksh-code-it.duckdns.org",
 		},
 		AllowMethods: []string{"GET", "PUT", "POST", "DLETE", "OPTIONS", "PATCH"},
 		AllowHeaders: []string{
