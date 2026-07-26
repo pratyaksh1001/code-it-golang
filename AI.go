@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"google.golang.org/genai"
 )
 
@@ -14,16 +16,23 @@ type Problem struct {
 	Tags         []string `json:"tags"`
 	Languages    []string `json:"languages"`
 	DriverCodes  []string `json:"driver_codes"`
-	SampleInput  string   `json:"sample_input"`
-	SampleOutput string   `json:"sample_output"`
+	SampleInput  []string `json:"sample_input"`
+	SampleOutput []string `json:"sample_output"`
 }
+
 type Result struct {
-	GoDriver   string `json:"go_driver"`
-	PYdriver   string `json:"py_driver"`
-	JSDriver   string `json:"js_driver"`
-	GoSolution string `json:"go_solution"`
-	PYSolution string `json:"py_solution"`
-	JSSolution string `json:"js_solution"`
+	GoMain          string `json:"go_main"`
+	PYMain          string `json:"py_main"`
+	JSMain          string `json:"js_main"`
+	GoSolution      string `json:"go_solution"`
+	PYSolution      string `json:"py_solution"`
+	JSSolution      string `json:"js_solution"`
+	GoImports       string `json:"go_imports"`
+	PYImports       string `json:"py_imports"`
+	JsImports       string `json:"js_imports"`
+	GoFuncSignature string `json:"go_func_signature"`
+	PYFuncSignature string `json:"py_func_signature"`
+	JsFuncSignature string `json:"js_func_signature"`
 }
 
 var ai *genai.Client
@@ -38,7 +47,7 @@ func connect_gemini() {
 	ai = client
 }
 
-func get_gemini_question() Problem {
+func get_gemini_question(topics []string, difficulty string, num_cases int) Problem {
 	ctx := context.Background()
 
 	geminiResSchema := map[string]any{
@@ -75,10 +84,10 @@ func get_gemini_question() Problem {
 				},
 			},
 			"sample_input": map[string]any{
-				"type": "string",
+				"type": "array",
 			},
 			"sample_output": map[string]any{
-				"type": "string",
+				"type": "array",
 			},
 		},
 		"required": []string{
@@ -100,8 +109,8 @@ func get_gemini_question() Problem {
 
 	resp, err := ai.Models.GenerateContent(
 		ctx,
-		"gemini-2.5-flash",
-		genai.Text("Generate an easy graph problem in"),
+		"gemini-3.5-flash",
+		genai.Text("topics are - "+fmt.Sprint(topics)+"difficulty level - "+difficulty+"number of test cases - "+fmt.Sprint(num_cases)+"language are go,python"+"you have to generate the content that all is compatible with everything the driver code should work properly with sample test cases"),
 		config,
 	)
 	if err != nil {
@@ -122,6 +131,7 @@ func get_gemini_question() Problem {
 	fmt.Println(string(pretty))
 
 	return problem
+
 }
 
 func generate_driver_code_from_IO(qid int) {
@@ -138,13 +148,22 @@ func generate_driver_code_from_IO(qid int) {
 	driver_generator_schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"go_driver": map[string]any{
+			"go_imports": map[string]any{
 				"type": "string",
 			},
-			"py_driver": map[string]any{
+			"py_imports": map[string]any{
 				"type": "string",
 			},
-			"js_driver": map[string]any{
+			"js_imports": map[string]any{
+				"type": "string",
+			},
+			"go_main": map[string]any{
+				"type": "string",
+			},
+			"py_main": map[string]any{
+				"type": "string",
+			},
+			"js_main": map[string]any{
 				"type": "string",
 			},
 			"go_solution": map[string]any{
@@ -156,6 +175,15 @@ func generate_driver_code_from_IO(qid int) {
 			"js_solution": map[string]any{
 				"type": "string",
 			},
+			"go_func_signature": map[string]any{
+				"type": "string",
+			},
+			"py_func_signature": map[string]any{
+				"type": "string",
+			},
+			"js_func_signature": map[string]any{
+				"type": "string",
+			},
 		},
 	}
 	config := &genai.GenerateContentConfig{
@@ -163,24 +191,42 @@ func generate_driver_code_from_IO(qid int) {
 		ResponseJsonSchema: driver_generator_schema,
 	}
 	var prompt string = ""
-	prompt += "DO NOT USE ESCAPE SEQUENCES MAKE SURE THE RESPONSE IS WELL FORMATTED AND INDENTED DO NOT USE ';' FOR ENDING LINE MAKE IT LOOK WELL FORMATTED you have to generate driver code and solution code only in go,js,py and the function that user runs should be named solution and the rest you have to handle do not use escape sequences for anything and the solution code should also strictly take the input and output format in consideration and there should be a function named after the question title and the usetr is supposed to write that function only with all the required arguments passed by driver code the user will not define the function you have to give function defined as well"
+	prompt += "do not use escape sequence and give the package and imports in import section only and the solution in solution part and main function that handles all IO and result printing in main part, and function definition with empty code and just function signature that has arguments passed and expected result datatype in the signature section separately and read the question and sample Input and output properly"
 	prompt += "description - " + description
 	prompt += "input will be like this - " + input
 	prompt += "output will be like this - " + output
 
-	resp, err := ai.Models.GenerateContent(context.Background(), "gemini-2.5-flash", genai.Text(prompt), config)
+	resp, err := ai.Models.GenerateContent(context.Background(), "gemini-3.5-flash", genai.Text(prompt), config)
 	if err != nil {
 		fmt.Println(err.Error())
 		fmt.Println("driver code generation failed")
 	}
-	//fmt.Println(string(resp.Text()))
+
 	err = json.Unmarshal([]byte(resp.Text()), &result)
 	if err != nil {
 		fmt.Println("json parsing of driver result failed")
 	}
-	//pretty, _ := json.MarshalIndent(result, "", "    ")
-	fmt.Println(result.GoDriver)
-	go db.Exec(context.Background(), "insert into driver_go(qid,code,solution) values($1,$2,$3);", qid, string(result.GoDriver), string(result.GoSolution))
-	go db.Exec(context.Background(), "insert into driver_py(qid,code,solution) values($1,$2,$3);", qid, string(result.PYdriver), string(result.PYSolution))
-	go db.Exec(context.Background(), "insert into driver_js(qid,code,solution) values($1,$2,$3);", qid, string(result.JSDriver), string(result.JSSolution))
+
+	fmt.Println(result.GoMain)
+	go db.Exec(context.Background(), "insert into driver_go(qid,main,solution,imports,signature) values($1,$2,$3,$4,$5);", qid, string(result.GoMain), string(result.GoSolution), string(result.GoImports), string(result.GoFuncSignature))
+	go db.Exec(context.Background(), "insert into driver_py(qid,main,solution,imports,signature) values($1,$2,$3,$4,$5);", qid, string(result.PYMain), string(result.PYSolution), string(result.PYImports), string(result.PYFuncSignature))
+	go db.Exec(context.Background(), "insert into driver_js(qid,main,solution,imports,signature) values($1,$2,$3,$4,$5);", qid, string(result.JSMain), string(result.JSSolution), string(result.JsImports), string(result.JsFuncSignature))
+}
+
+func AI_question_gen(c *gin.Context) {
+	var data struct {
+		Topics     []string `json:"topics"`
+		Difficulty string   `json:"difficulty"`
+		Num_cases  int      `json:"num_cases"`
+	} = struct {
+		Topics     []string `json:"topics"`
+		Difficulty string   `json:"difficulty"`
+		Num_cases  int      `json:"num_cases"`
+	}{}
+	c.ShouldBindJSON(&data)
+	res := get_gemini_question(data.Topics, data.Difficulty, data.Num_cases)
+	fmt.Println(res)
+	c.JSON(http.StatusOK, gin.H{
+		"result": res,
+	})
 }

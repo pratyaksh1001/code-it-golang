@@ -329,12 +329,12 @@ func run_tests_py(c *gin.Context) {
 	end := time.Now()
 	time_taken := end.Sub(now)
 	fmt.Println(time_taken.Milliseconds())
-	passed := (score == total)
+	//passed := (score == total)
 	if score == total && data.Submission {
 		db.Exec(context.Background(), "insert into submissions(qid,email,runtime,submitted_at,language) values($1,$2,$3,$4,$5);", data.Qid, email, time_taken.Milliseconds(), time.Now().UTC(), data.Language)
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"success":    passed,
+		//"success":    passed,
 		"score":      score,
 		"time_taken": time_taken.Milliseconds(),
 		"error":      code_failure,
@@ -365,7 +365,7 @@ func execute_py(name string, testcase struct {
 	}
 
 	res <- (strings.TrimSpace(strings.Trim(string(out), "\n")) == (testcase.Output))
-	if code_failure == "" {
+	if code_failure != "" {
 		err_chan <- code_failure
 	} else {
 		err_chan <- string(out)

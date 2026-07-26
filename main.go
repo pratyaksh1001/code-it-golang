@@ -15,7 +15,7 @@ func main() {
 	cache = redis.NewClient(opt)
 	godotenv.Load()
 	go connect_gemini()
-	go get_facts()
+	//go get_facts()
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
 			"http://localhost:3000",
@@ -53,6 +53,7 @@ func main() {
 	r.GET("/tags", get_tags)
 	r.GET("/problem/:qid", get_question)
 	r.GET("/article", send_random_fact)
+	r.POST("/AI_question", AI_question_gen)
 
 	r.Run(":9000")
 	defer db.Close()

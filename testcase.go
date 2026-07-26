@@ -30,13 +30,14 @@ func create_testcase(c *gin.Context) {
 	fmt.Println()
 	var solution_code_go string
 	var driver_code_go string
-	db.QueryRow(context.Background(), "select solution,code from driver_go where qid=$1;", testcase.Qid).Scan(&solution_code_go, &driver_code_go)
+	var imports_code_go string
+	db.QueryRow(context.Background(), "select main,solution,imports from driver_go where qid=$1;", testcase.Qid).Scan(&driver_code_go, &solution_code_go, &imports_code_go)
 	src, _ := os.CreateTemp("", "*.go")
 	defer os.Remove(src.Name())
 
-	solution_code_go = strings.Trim(solution_code_go, "package main")
-	solution_code_go = driver_code_go + solution_code_go
-	_, err := src.WriteString(solution_code_go)
+	solution := imports_code_go + "\n" + solution_code_go + "\n" + driver_code_go
+	fmt.Println(solution)
+	_, err := src.WriteString(solution)
 	if err != nil {
 		fmt.Println("error occured while writing in temp file")
 	}
@@ -59,6 +60,5 @@ func create_testcase(c *gin.Context) {
 	} else {
 		flag = false
 	}
-
 	c.JSON(http.StatusOK, gin.H{"created": flag})
 }

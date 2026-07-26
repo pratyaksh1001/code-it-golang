@@ -21,6 +21,7 @@ func create_question(c *gin.Context) {
 	}
 
 	c.ShouldBindJSON(&question)
+	fmt.Println(question)
 	token_decoded, _ := jwt.Parse(question.Token, func(token *jwt.Token) (any, error) {
 		return Signature_key, nil
 	})
@@ -181,17 +182,19 @@ func get_driver(c *gin.Context) {
 	c.ShouldBindJSON(&data)
 	fmt.Println(data)
 	var driver string
-	var abbr string
+	var imports string
+	var signature string
 	if data.Language == "python" {
-		db.QueryRow(c.Request.Context(), "select code from driver_py where qid=$1", data.Qid).Scan(&driver)
+		db.QueryRow(c.Request.Context(), "select main,imports,signature from driver_py where qid=$1", data.Qid).Scan(&driver, &imports, &signature)
 	} else if data.Language == "go" {
-		db.QueryRow(c.Request.Context(), "select code from driver_go where qid=$1", data.Qid).Scan(&driver)
+		db.QueryRow(c.Request.Context(), "select main,imports,signature from driver_go where qid=$1", data.Qid).Scan(&driver, &imports, &signature)
 	} else if data.Language == "javascript" {
-		db.QueryRow(c.Request.Context(), "select code from driver_js where qid=$1", data.Qid).Scan(&driver)
+		db.QueryRow(c.Request.Context(), "select main,imports,signature from driver_js where qid=$1", data.Qid).Scan(&driver, &imports, &signature)
 	}
-	db.QueryRow(c.Request.Context(), "select code from $1 where qid=$2", "driver_"+abbr, data.Qid).Scan(&driver)
 	fmt.Println(driver)
 	c.JSON(http.StatusOK, gin.H{
-		"code": driver,
+		"main":           driver,
+		"imports":        imports,
+		"func_signature": signature,
 	})
 }

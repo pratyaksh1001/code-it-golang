@@ -21,7 +21,7 @@ type APIRes struct {
 
 func get_facts() {
 	client := &http.Client{
-		Timeout: time.Second * 10,
+		Timeout: time.Second * 3,
 	}
 	resp, err := client.Get("https://api.stackexchange.com/2.3/questions?order=desc&sort=votes&site=stackoverflow")
 	if err != nil {
