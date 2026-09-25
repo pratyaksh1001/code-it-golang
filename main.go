@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -13,7 +15,10 @@ func main() {
 	r := gin.Default()
 	opt, _ := redis.ParseURL("rediss://default:gQAAAAAAAhGlAAIgcDIyNGVmN2Y2NGQyOWM0MTRmOWUwMWI1Yzg0MzM2NzE4Mg@vital-mink-135589.upstash.io:6379")
 	cache = redis.NewClient(opt)
-	godotenv.Load()
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("error in loading ENV")
+	}
 	go connect_gemini()
 	//go get_facts()
 	r.Use(cors.New(cors.Config{
@@ -53,7 +58,7 @@ func main() {
 	r.GET("/tags", get_tags)
 	r.GET("/problem/:qid", get_question)
 	r.GET("/article", send_random_fact)
-	r.POST("/AI_question", AI_question_gen)
+	r.POST("/AI_question", AI_question)
 
 	r.Run(":9000")
 	defer db.Close()

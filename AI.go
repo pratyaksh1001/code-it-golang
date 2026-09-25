@@ -4,20 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"google.golang.org/genai"
 )
 
 type Problem struct {
-	Title        string   `json:"title"`
-	Description  string   `json:"description"`
-	Tags         []string `json:"tags"`
-	Languages    []string `json:"languages"`
-	DriverCodes  []string `json:"driver_codes"`
-	SampleInput  []string `json:"sample_input"`
-	SampleOutput []string `json:"sample_output"`
+	Title              string   `json:"title"`
+	Description        string   `json:"description"`
+	Tags               []string `json:"tags"`
+	Languages          []string `json:"languages"`
+	FunctionSignatures []string `json:"function_signatures"`
+	Imports            []string `json:"imports"`
+	MainCodes          []string `json:"main_codes"`
+	SampleInput        []string `json:"sample_input"`
+	SampleOutput       []string `json:"sample_output"`
 }
 
 type Result struct {
@@ -71,13 +71,25 @@ func get_gemini_question(topics []string, difficulty string, num_cases int) Prob
 					"type": "string",
 				},
 			},
-			"driver_codes": map[string]any{
+			"function_signatures": map[string]any{
 				"type": "array",
 				"items": map[string]any{
 					"type": "string",
 				},
 			},
 			"solution_codes": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"main_codes": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"import_statements": map[string]any{
 				"type": "array",
 				"items": map[string]any{
 					"type": "string",
@@ -95,10 +107,12 @@ func get_gemini_question(topics []string, difficulty string, num_cases int) Prob
 			"description",
 			"tags",
 			"languages",
-			"driver_codes",
+			"function_signatures",
+			"main_codes",
 			"sample_input",
 			"sample_output",
 			"solution_codes",
+			"import_statements",
 		},
 	}
 
@@ -129,9 +143,7 @@ func get_gemini_question(topics []string, difficulty string, num_cases int) Prob
 	fmt.Println("\nPretty JSON:")
 	pretty, _ := json.MarshalIndent(problem, "", "  ")
 	fmt.Println(string(pretty))
-
 	return problem
-
 }
 
 func generate_driver_code_from_IO(qid int) {
@@ -211,22 +223,4 @@ func generate_driver_code_from_IO(qid int) {
 	go db.Exec(context.Background(), "insert into driver_go(qid,main,solution,imports,signature) values($1,$2,$3,$4,$5);", qid, string(result.GoMain), string(result.GoSolution), string(result.GoImports), string(result.GoFuncSignature))
 	go db.Exec(context.Background(), "insert into driver_py(qid,main,solution,imports,signature) values($1,$2,$3,$4,$5);", qid, string(result.PYMain), string(result.PYSolution), string(result.PYImports), string(result.PYFuncSignature))
 	go db.Exec(context.Background(), "insert into driver_js(qid,main,solution,imports,signature) values($1,$2,$3,$4,$5);", qid, string(result.JSMain), string(result.JSSolution), string(result.JsImports), string(result.JsFuncSignature))
-}
-
-func AI_question_gen(c *gin.Context) {
-	var data struct {
-		Topics     []string `json:"topics"`
-		Difficulty string   `json:"difficulty"`
-		Num_cases  int      `json:"num_cases"`
-	} = struct {
-		Topics     []string `json:"topics"`
-		Difficulty string   `json:"difficulty"`
-		Num_cases  int      `json:"num_cases"`
-	}{}
-	c.ShouldBindJSON(&data)
-	res := get_gemini_question(data.Topics, data.Difficulty, data.Num_cases)
-	fmt.Println(res)
-	c.JSON(http.StatusOK, gin.H{
-		"result": res,
-	})
 }

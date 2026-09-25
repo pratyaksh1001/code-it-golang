@@ -198,3 +198,18 @@ func get_driver(c *gin.Context) {
 		"func_signature": signature,
 	})
 }
+
+func AI_question(c *gin.Context) {
+	var data struct {
+		Prompt     string   `json:"prompt"`
+		Difficulty string   `json:"difficulty"`
+		Num_cases  int      `json:"num_cases"`
+		Tags       []string `json:"tags"`
+	}
+	c.ShouldBindJSON(&data)
+	fmt.Println(data)
+	question := get_gemini_question(data.Tags, data.Difficulty, data.Num_cases)
+	c.JSON(http.StatusOK, gin.H{
+		"question": question,
+	})
+}
